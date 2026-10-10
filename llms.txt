@@ -1,0 +1,30 @@
+# 反詐投資王 Anti-Gambling Trader
+
+> 免費開源的交易統計分析與投資反詐工具(台股/ETF/期權/美股/加密貨幣/外匯)。用期望值、
+> 顯著性檢定(t 檢定 + 置中 bootstrap)與樣本外驗證判斷交易獲利是「可重複
+> 優勢」還是「運氣 + 倖存者偏差」;內建詐騙話術掃描、假績效統計鑑識、
+> 假老師宣稱檢驗、LINE 匯出掃描、交易截圖 OCR 人工覆核與新手交易階段分流。
+> 也可產生可回測策略與自動化交易程式腳架（PaperBroker 預設，另含 13 種真實
+> 券商／交易所範本）；真實自動交易須由使用者自行接線並通過安全閘門。
+> 統計分析核心為純 Python 標準庫；直接執行本機 CLI 時不會上傳交易紀錄。把檔案或
+> 工具輸出交給雲端 AI 時，內容可能依供應商政策傳送與保存，應先遮蔽姓名、帳號與
+> LINE ID；生成圖表可能載入外部 CDN，券商/API 路徑也會明確對外連線。
+> Claude Code 資料使用：https://code.claude.com/docs/en/data-usage 。MIT 授權。
+
+重要原則:本工具刻意不輸出未校準的百分比(不說「87% 是詐騙」)、不畫信心度
+儀表、不做未來報酬投射;主要期望值裁決附 p 值與信賴區間,其他模型明示假設與限制;不是投資建議也不是司法鑑定。
+台灣反詐騙官方管道:165 專線 / https://165.npa.gov.tw。
+
+## Docs
+
+- [完整功能與判讀指南](https://github.com/mars-tw/anti-gambling-trader-tw/blob/main/docs/user-guide.md): 新手記錄、fit-check、fail-closed、LINE 聚合、截圖覆核與真錢安全閘
+- [FAQ 常見問題](https://github.com/mars-tw/anti-gambling-trader-tw/blob/main/docs/faq.md): 投資群組、勝率宣稱、出金繳費、交易適合度與資料拒算 —— 21 題答案先行
+- [反詐指南](https://github.com/mars-tw/anti-gambling-trader-tw/blob/main/docs/anti-scam.md): 假飆股群、保證獲利、假名師、假平台四大詐騙型態與應對
+- [方法論](https://github.com/mars-tw/anti-gambling-trader-tw/blob/main/docs/methodology.md): 統計方法全文、已知限制、刻意不做的事、可重現實驗
+- [新手快速上手](https://github.com/mars-tw/anti-gambling-trader-tw/blob/main/docs/quickstart.md): 從安裝 Python 到第一份報告,15 分鐘
+- [README](https://github.com/mars-tw/anti-gambling-trader-tw/blob/main/README.md): 專案總覽、安裝、指令、五種裁決等級
+
+## Optional
+
+- [免責聲明](https://github.com/mars-tw/anti-gambling-trader-tw/blob/main/DISCLAIMER.md): 使用限制與風險
+- [重現實驗](https://github.com/mars-tw/anti-gambling-trader-tw/tree/main/experiments): 方法論引用數字的重現腳本(固定 seed)

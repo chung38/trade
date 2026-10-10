@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "如果本工具對你的研究或報導有幫助,歡迎引用。"
+title: "反詐投資王 Anti-Gambling Trader"
+abstract: >-
+  用統計學判斷交易獲利是可重複優勢還是運氣與倖存者偏差的開源工具,
+  內建投資詐騙話術掃描、假績效統計鑑識與假老師宣稱檢驗。
+  並可產生預設紙上模擬的自動化交易程式腳架與真實券商範本。
+  支援台股、美股、加密貨幣;統計分析核心為純 Python 標準庫,
+  交易分析資料全程本機處理。
+authors:
+  - name: "好棒棒反詐協會 - 免費顧問 阿軒割割(社群化名)"
+type: software
+repository-code: "https://github.com/mars-tw/anti-gambling-trader-tw"
+url: "https://github.com/mars-tw/anti-gambling-trader-tw"
+license: MIT
+keywords:
+  - anti-fraud
+  - investment-scam-detection
+  - trading-statistics
+  - survivorship-bias
+  - taiwan-stock
+  - expectancy
+  - backtesting
+  - algorithmic-trading
+  - paper-trading
