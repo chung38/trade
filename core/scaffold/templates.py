@@ -121,7 +121,7 @@ def _broker_keys_comment() -> str:
     return " | ".join(["paper"] + sorted(BROKER_TEMPLATES.keys()))
 
 
-# 各券商建構子需要的 credentials 欄位；Pionex 只保存環境變數名稱，不落盤保存 key。
+# 各券商建構子需要的 credentials 欄位；Pionex / OKX 只保存環境變數名稱，不落盤保存 key。
 # 固定產 api_key/api_secret 會讓 13 個券商有 9 個照表填卻對不上建構子
 # (第 8 輪券商層稽核逐一實測的簽名)。
 _CREDENTIAL_FIELDS: dict[str, list[str]] = {
@@ -135,7 +135,9 @@ _CREDENTIAL_FIELDS: dict[str, list[str]] = {
     "tw_futures": ['account: ""', 'password: ""', 'broker: ""'],
     "ccxt": ['exchange_id: "binance"', 'api_key: ""', 'api_secret: ""',
              'password: ""', "sandbox: true"],
-    "okx": ['api_key: ""', 'api_secret: ""', 'passphrase: ""', "sandbox: true"],
+    "okx": ['api_key_env: "OKX_API_KEY"', 'api_secret_env: "OKX_API_SECRET"',
+            'passphrase_env: "OKX_API_PASSPHRASE"', "demo: true",
+            'quote_currency: "USDT"'],
     "bybit": ['api_key: ""', 'api_secret: ""', "testnet: true"],
     "pionex": ['api_key_env: "PIONEX_API_KEY"',
                'api_secret_env: "PIONEX_API_SECRET"',
@@ -168,7 +170,7 @@ symbols:
 
 broker: {opts.broker}        # 可選:{_broker_keys_comment()}
 
-# 真實券商連線資訊（紙上模擬不需要）。Pionex 只填環境變數名稱；其他範本欄位
+# 真實券商連線資訊（紙上模擬不需要）。Pionex / OKX 只填環境變數名稱；其他範本欄位
 # 對應 brokers/ 內的建構子簽名。
 # 請勿提交到 git。
 credentials:
@@ -301,6 +303,25 @@ def broker_setup_py(opts, broker_tmpl) -> str:
         #     api_secret=os.environ[creds.get("api_secret_env", "PIONEX_API_SECRET")],
         #     quote_currency=creds.get("quote_currency", "USDT"),
         #     timeout=creds.get("timeout", 10.0),
+        # )
+        # return broker
+        pass
+    return PaperBroker(
+        cash=config.get("paper", {{}}).get("starting_cash", 1_000_000),
+        fee_rate=config.get("paper", {{}}).get("fee_rate", 0.001),
+    )'''
+        elif broker_tmpl.key == "okx":
+            body = f'''    # 預設仍回傳紙上模擬。OKX 金鑰只從環境變數讀取，不寫進 config.yaml；
+    # demo 預設 true，送到 OKX 模擬交易（假錢）。
+    if config.get("broker") == "okx":
+        # import os
+        # creds = config.get("credentials", {{}})
+        # broker = {cls}(
+        #     api_key=os.environ[creds.get("api_key_env", "OKX_API_KEY")],
+        #     api_secret=os.environ[creds.get("api_secret_env", "OKX_API_SECRET")],
+        #     passphrase=os.environ[creds.get("passphrase_env", "OKX_API_PASSPHRASE")],
+        #     demo=creds.get("demo", True) is not False,
+        #     quote_currency=creds.get("quote_currency", "USDT"),
         # )
         # return broker
         pass

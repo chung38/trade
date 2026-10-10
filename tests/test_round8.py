@@ -133,7 +133,8 @@ def test_config_credentials_match_broker_signature():
     assert "host:" in y and "client_id:" in y and "api_secret" not in y
     y2 = config_yaml(ScaffoldOptions(project_name="t", broker="okx",
                                      symbols=["BTCUSDT"]), False, "unknown")
-    assert "passphrase:" in y2
+    assert "passphrase_env:" in y2
+    assert 'api_key: ""' not in y2  # OKX 金鑰只放環境變數
 
 
 def test_required_sample_size_handles_inf_payoff():

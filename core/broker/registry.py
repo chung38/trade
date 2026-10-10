@@ -1,8 +1,8 @@
 """券商範例框架註冊表。
 
-這裡的範本分兩種誠實標示:7 個含官方 API / SDK 的「示意呼叫」(binance/ibkr/
-alpaca/shioaji/pionex/ccxt/tradier —— 有可執行的下單語句,但每個下單方法第一行
-都是 _guard_live() 閘門,未經雙重確認一律 PermissionError),另 6 個為
+這裡的範本分兩種誠實標示:8 個含官方 API / SDK 的「示意呼叫」(binance/ibkr/
+alpaca/shioaji/pionex/ccxt/okx/tradier —— 有可執行的下單語句,但每個下單方法第一行
+都是 _guard_live() 閘門,未經雙重確認一律 PermissionError),另 5 個為
 「只寫到定位」的純骨架(TODO 留白)。本工具不內建任何金鑰,連線資訊
 一律由交易者自填 —— 沒準備好之前,物理上碰不到真錢。
 
