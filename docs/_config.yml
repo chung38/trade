@@ -1,0 +1,23 @@
+# GitHub Pages (Jekyll) 設定 — 反詐投資王
+# 建議放置位置:Pages 發布來源目錄(若以 /docs 為來源,放在 docs/_config.yml)。
+# 註:GitHub Pages 預設已啟用 jekyll-relative-links / jekyll-optional-front-matter /
+#     jekyll-default-layout,因此 .md 之間的相對連結會自動轉成頁面連結,
+#     未寫 layout 的頁面也會套用主題預設版型,無需額外設定。
+
+title: 反詐投資王
+description: >-
+  投資反詐、交易統計與自動化交易程式工具:掃描 LINE 投資群話術、檢驗老師帶單、
+  覆核交易截圖,用期望值與樣本外驗證判斷交易階段,並產生預設 PaperBroker 的
+  自動化交易程式腳架與 13 種真實券商／交易所範本。
+  遇疑似詐騙請撥 165 反詐騙專線。
+lang: zh-Hant-TW
+timezone: Asia/Taipei
+
+url: "https://mars-tw.github.io"
+baseurl: "/anti-gambling-trader-tw"
+
+theme: jekyll-theme-primer
+
+plugins:
+  - jekyll-sitemap
+  - jekyll-seo-tag
