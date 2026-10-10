@@ -709,60 +709,234 @@ class CcxtBroker(BrokerAdapter):
 )
 
 
-# ── OKX(專屬範本,示範非 Binance 的另一大交易所)───────────
+# ── OKX 現貨(用 ccxt 實作,預設模擬交易)─────────────────────
 _OKX = BrokerTemplate(
     key="okx",
-    name="OKX(加密貨幣)",
+    name="OKX(加密貨幣現貨,ccxt,預設模擬交易)",
     market="crypto",
-    sdk_install="pip install ccxt  # 建議用 ccxt 接 OKX,介面統一",
+    sdk_install="pip install ccxt",
     notes=(
-        "OKX 的 API 需要 api_key + secret + passphrase 三項。"
-        "建立 key 時關閉提領權限,並先用 demo trading 測試。"
-        "最省事的方式是用上面的 ccxt 範本,把 exchange_id 設為 'okx'。"
+        "OKX 的 API 需要 api_key + secret + passphrase 三項,建立 key 時關閉提領權限並綁定 IP。"
+        "本範本預設 demo=True,送到 OKX 模擬交易(Demo Trading,假錢);模擬盤的 key "
+        "要在 OKX 網站切到『模擬交易』後另外建立,正式盤 key 不能用在模擬盤。"
+        "只做現貨,不開槓桿、不做合約。"
     ),
-    code=f'''"""OKX 連接器(範例框架)。建議直接用 ccxt 範本並設 exchange_id='okx'。
+    code='''"""OKX 現貨連接器(ccxt 實作,預設 OKX 模擬交易)。
 
-若要用 OKX 官方 SDK(python-okx),請依其文件實作以下方法。
+官方文件:https://www.okx.com/docs-v5/zh/#order-book-trading-trade-post-place-order
+- demo=True(預設)時,ccxt 會在每個請求加上 x-simulated-trading: 1,
+  送到 OKX 模擬交易(假錢)。模擬盤需要在 OKX 網站「模擬交易」頁另外建立 API key。
+- 只做現貨(tdMode=cash):不借幣、不開槓桿、不做合約。
+- Order.quantity 一律是「標的幣數量」(例如 0.001 BTC)。市價買單會明確送
+  tgtCcy=base_ccy,避免 OKX 把數量當成 USDT 金額。
+- 不論 demo 與否,下單與撤單都必須先通過 _guard_live() 雙重確認。
+- 現貨餘額 API 沒有成本價,持倉一律標 cost_basis_known=False,
+  策略不會拿假的成本價去觸發停損/停利。
 """
 
-{_IMPORT}
+import math
+import re
+import uuid
+from decimal import Decimal, InvalidOperation
+
+''' + _IMPORT + '''
+
+_CLIENT_ID_RE = re.compile(r"^[A-Za-z0-9]{1,32}$")
+
+
+def _finite_positive(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number) or number <= 0:
+        return None
+    return number
+
 
 class OKXBroker(BrokerAdapter):
     name = "okx"
-    is_live = True
+    is_live = True   # 模擬盤也走同一道閘門,避免設定切錯時直接打到真錢
 
     def __init__(self, api_key: str, api_secret: str, passphrase: str,
-                 sandbox: bool = True):
+                 demo: bool = True, quote_currency: str = "USDT", exchange=None):
         super().__init__()
+        if demo is not True and demo is not False:
+            raise ValueError("demo 必須是布林值 True 或 False")
         self.api_key = api_key
         self.api_secret = api_secret
         self.passphrase = passphrase        # OKX 特有
-        self.sandbox = sandbox
+        self.demo = demo
+        self.quote_currency = str(quote_currency).upper()
+        self.exchange = exchange            # 測試可注入假的 ccxt 物件
+        self._order_symbols = {}            # order_id -> symbol,撤單時需要
 
+    # ── 連線 ─────────────────────────────────────────────
     def connect(self) -> None:
-        # TODO: 用 python-okx 或 ccxt 初始化。ccxt 範例:
-        #   import ccxt
-        #   self.ex = ccxt.okx({{"apiKey": self.api_key, "secret": self.api_secret,
-        #                        "password": self.passphrase}})
-        #   if self.sandbox: self.ex.set_sandbox_mode(True)
-        raise NotImplementedError("請依 OKX 官方 SDK 或 ccxt 實作 connect()")
+        if self.exchange is None:
+            import ccxt
+            self.exchange = ccxt.okx({
+                "apiKey": self.api_key,
+                "secret": self.api_secret,
+                "password": self.passphrase,
+                "enableRateLimit": True,
+                "options": {"defaultType": "spot"},
+            })
+        if self.demo:
+            self.exchange.set_sandbox_mode(True)
+        self.exchange.load_markets()
+
+    def _require_connected(self):
+        if self.exchange is None or not getattr(self.exchange, "markets", None):
+            raise RuntimeError("OKX 尚未連線,請先呼叫 connect()")
+        return self.exchange
+
+    # ── 代號與市場規格 ───────────────────────────────────
+    def normalize_symbol(self, symbol: str) -> str:
+        """接受 BTC/USDT、BTC-USDT、BTC_USDT,統一成 ccxt 的 BTC/USDT。"""
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise ValueError("代號不可空白")
+        text = symbol.strip().upper().replace("-", "/").replace("_", "/")
+        if "/" not in text:
+            text = f"{text}/{self.quote_currency}"
+        ex = self._require_connected()
+        market = ex.markets.get(text)
+        if market is None:
+            raise ValueError(f"OKX 沒有現貨交易對 {text}")
+        if not market.get("spot"):
+            raise ValueError(f"{text} 不是現貨交易對;本連接器只做現貨")
+        if market.get("active") is False:
+            raise ValueError(f"{text} 目前暫停交易")
+        return text
+
+    def _market(self, symbol: str) -> dict:
+        return self._require_connected().markets[symbol]
+
+    # ── 查詢 ─────────────────────────────────────────────
+    def get_price(self, symbol: str) -> float:
+        sym = self.normalize_symbol(symbol)
+        ticker = self.exchange.fetch_ticker(sym)
+        price = _finite_positive(ticker.get("last"))
+        if price is None:
+            raise RuntimeError(f"OKX 回傳的 {sym} 價格無效: {ticker.get('last')!r}")
+        return price
+
+    def _balance_totals(self) -> dict:
+        bal = self._require_connected().fetch_balance()
+        totals = bal.get("total") or {}
+        return {str(k).upper(): v for k, v in totals.items()}
 
     def get_account(self) -> AccountInfo:
-        raise NotImplementedError
+        bal = self._require_connected().fetch_balance()
+        quote = bal.get(self.quote_currency) or {}
+        cash = float(quote.get("free") or 0)
+        equity = float(quote.get("total") or 0)
+        for pos in self.get_positions():
+            equity += pos.quantity * pos.market_price
+        return AccountInfo(cash=cash, equity=equity, currency=self.quote_currency)
 
     def get_positions(self) -> list[Position]:
-        return []
+        out = []
+        for asset, total in self._balance_totals().items():
+            qty = _finite_positive(total)
+            if qty is None or asset == self.quote_currency:
+                continue
+            sym = f"{asset}/{self.quote_currency}"
+            if sym not in self.exchange.markets:
+                continue   # 沒有對 USDT 的現貨市場,無法估值就不列入
+            min_amount = _finite_positive(
+                ((self._market(sym).get("limits") or {}).get("amount") or {}).get("min")
+            )
+            if min_amount is not None and qty < min_amount:
+                continue   # 低於最小下單量的零頭,賣不掉也不算部位
+            price = self.get_price(sym)
+            out.append(Position(sym, qty, avg_price=0.0, market_price=price,
+                                cost_basis_known=False))
+        return out
 
-    def get_price(self, symbol: str) -> float:
-        raise NotImplementedError
+    def fetch_open_orders(self, symbol: str | None = None) -> list:
+        sym = self.normalize_symbol(symbol) if symbol else None
+        return self._require_connected().fetch_open_orders(sym)
+
+    # ── 下單 ─────────────────────────────────────────────
+    def _check_limits(self, symbol: str, amount: float, price: float) -> None:
+        limits = self._market(symbol).get("limits") or {}
+        min_amount = _finite_positive((limits.get("amount") or {}).get("min"))
+        if min_amount is not None and amount < min_amount:
+            raise ValueError(f"{symbol} 數量 {amount} 低於 OKX 最小下單量 {min_amount}")
+        min_cost = _finite_positive((limits.get("cost") or {}).get("min"))
+        if min_cost is not None and amount * price < min_cost:
+            raise ValueError(
+                f"{symbol} 金額 {amount * price:.8f} 低於 OKX 最小下單金額 {min_cost}"
+            )
 
     def place_order(self, order: Order) -> OrderResult:
-        self._guard_live()
+        self._guard_live()   # 真實下單前的安全檢查,務必保留
         order.validate()
-        raise NotImplementedError
+        try:
+            sym = self.normalize_symbol(order.symbol)
+            amount_text = self.exchange.amount_to_precision(sym, order.quantity)
+            amount = float(Decimal(str(amount_text)))
+        except (ValueError, InvalidOperation) as exc:
+            return OrderResult(ok=False, message=str(exc))
+        if amount <= 0:
+            return OrderResult(ok=False, message="數量依 OKX 精度捨去後為 0,不下單")
 
-    def cancel_order(self, order_id: str) -> bool:
-        raise NotImplementedError
+        client_id = order.client_order_id or uuid.uuid4().hex
+        if not _CLIENT_ID_RE.match(client_id):
+            return OrderResult(ok=False,
+                               message="client_order_id 只能是 1-32 個英數字(OKX 規定)")
+
+        side = "buy" if order.side == OrderSide.BUY else "sell"
+        params = {"tdMode": "cash", "clientOrderId": client_id}
+        price = None
+        try:
+            if order.order_type == OrderType.LIMIT:
+                price = float(self.exchange.price_to_precision(sym, order.limit_price))
+                self._check_limits(sym, amount, price)
+                resp = self.exchange.create_order(sym, "limit", side, amount, price, params)
+            else:
+                self._check_limits(sym, amount, self.get_price(sym))
+                if side == "buy":
+                    params["tgtCcy"] = "base_ccy"   # 數量是幣,不是 USDT
+                resp = self.exchange.create_order(sym, "market", side, amount, None, params)
+        except ValueError as exc:
+            return OrderResult(ok=False, message=str(exc))
+        except Exception as exc:  # noqa: BLE001 — ccxt 例外種類很多,一律回報失敗
+            return OrderResult(ok=False, message=f"{type(exc).__name__}: {exc}")
+
+        order_id = str(resp.get("id") or "")
+        if not order_id:
+            return OrderResult(ok=False, message="OKX 沒有回傳委託編號", raw=resp)
+        self._order_symbols[order_id] = sym
+
+        # OKX 下單回應只有編號;再查一次才知道實際成交量與均價。
+        detail = resp
+        try:
+            detail = self.exchange.fetch_order(order_id, sym) or resp
+        except Exception:  # noqa: BLE001 — 查不到不影響「已送出」這件事
+            pass
+        filled = float(detail.get("filled") or 0)
+        avg = float(detail.get("average") or 0)
+        return OrderResult(
+            ok=True, order_id=order_id, filled_quantity=filled, avg_price=avg,
+            message=str(detail.get("status") or "submitted"), raw=detail,
+        )
+
+    def cancel_order(self, order_id: str, symbol: str | None = None) -> bool:
+        self._guard_live()   # 撤單也會改變真實委託,同樣要過閘門
+        order_id = str(order_id or "").strip()
+        if not order_id:
+            raise ValueError("order_id 不可空白")
+        sym = self.normalize_symbol(symbol) if symbol else self._order_symbols.get(order_id)
+        if not sym:
+            raise ValueError("OKX 撤單需要交易對;請傳入 symbol,例如 cancel_order(id, 'BTC/USDT')")
+        try:
+            self.exchange.cancel_order(order_id, sym)
+        except Exception:  # noqa: BLE001
+            return False
+        self._order_symbols.pop(order_id, None)
+        return True
 ''',
 )
 
